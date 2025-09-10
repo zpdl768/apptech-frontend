@@ -292,8 +292,6 @@ class _HomeContentState extends State<HomeContent> with TickerProviderStateMixin
                     )
                   ],
                 ),
-                  ],
-                ),
                 const SizedBox(height: 16),
                 
                 // ===== 일일 목표 달성 알림 메시지 =====
