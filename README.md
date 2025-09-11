@@ -68,18 +68,6 @@ AppTech is a reward-based mobile application where users can earn virtual cash b
 
 ---
 
-## 🔄 Cloud-Native Migration Plan (Planned)
-
-While the current MVP leverages Firebase for simplicity and rapid iteration, I plan to migrate to a serverless architecture using:
-
-* **AWS Lambda** for backend logic
-* **API Gateway** for managing HTTP endpoints
-* **DynamoDB** as a scalable NoSQL
-
-This transition will allow the system to scale with user growth, improve performance, and reduce backend maintenance overhead.
-
----
-
 ## 🔧 Project Architecture
 
 ```
@@ -106,6 +94,18 @@ apptech/
 * **Daily Cap**: Maximum 100 points per day
 * **Real-time Feedback**: Points instantly reflected
 * **Usage**: Tap to collect, spend in store, or accumulate
+
+---
+
+## 🔄 Cloud-Native Migration Plan (Planned)
+
+While the current MVP leverages Firebase for simplicity and rapid iteration, I plan to migrate to a serverless architecture using:
+
+* **AWS Lambda** for backend logic
+* **API Gateway** for managing HTTP endpoints
+* **DynamoDB** as a scalable NoSQL
+
+This transition will allow the system to scale with user growth, improve performance, and reduce backend maintenance overhead.
 
 ---
 
