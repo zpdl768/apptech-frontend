@@ -31,7 +31,7 @@ AppTech is a reward-based mobile application where users can earn virtual cash b
 
 ---
 
-## 🛠️ Development Notes
+## 🚀 Development Notes
 
 - **Aug 11, 2025**: Planned the overall project structure and feature scope  
 - **Aug 12, 2025**: Drafted component-level data flow for screen and service interaction  
@@ -55,7 +55,7 @@ AppTech is a reward-based mobile application where users can earn virtual cash b
 
 ---
 
-## 🚀 Tech Stack Overview
+## 🛠️ Tech Stack Overview
 
 | Layer         | Technology                        |
 | ------------- | --------------------------------- |
@@ -68,7 +68,7 @@ AppTech is a reward-based mobile application where users can earn virtual cash b
 
 ---
 
-## ☁️ Cloud-Native Migration Plan (Planned)
+## 🔄 Cloud-Native Migration Plan (Planned)
 
 While the current MVP leverages Firebase for simplicity and rapid iteration, I plan to migrate to a serverless architecture using:
 
@@ -100,7 +100,7 @@ apptech/
 
 ---
 
-## 🚫 Typing & Reward Rules
+## 💰 Typing & Reward Rules
 
 * **Typing Rule**: Every 10 characters = 1 point
 * **Daily Cap**: Maximum 100 points per day
@@ -109,7 +109,7 @@ apptech/
 
 ---
 
-## 🚚 Development Status & Plans
+## 🧭 Development Status & Plans
 
 * Firebase-backed MVP is live
 * Serverless migration (Lambda + DynamoDB) in roadmap
