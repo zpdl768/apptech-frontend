@@ -4,22 +4,6 @@ AppTech is a reward-based mobile application where users can earn virtual cash b
 
 ---
 
-## 📸 Screens Overview
-
-### 🏠 Home Screen: Real-time progress bar, daily goal indicator, bonus reward display
-![Home Screen](assets/screenshots/home_screen.png)
-
-### ⌨️ Second(Event) Screen: *(Feature under planning – to be implemented in a future update)*
-![Typing Screen](assets/screenshots/typing_screen.png)
-
-### 🛍️ Store Screen: Grid layout gifticon items, point balance, and purchase flow
-![Store Screen](assets/screenshots/store_screen.png)
-
-### 🙍 Profile Screen: Total stats, session logs, settings, and logout option
-![Profile Screen](assets/screenshots/profile_screen.png)
-
----
-
 ## ✨ Key Features
 
 * **🎯 Typing-to-Earn System**: Earn 1 point per 10 characters typed (up to 100 points per day)
@@ -31,30 +15,6 @@ AppTech is a reward-based mobile application where users can earn virtual cash b
 
 ---
 
-## 🛠️ Development Notes
-
-- **Aug 11, 2025**: Planned the overall project structure and feature scope  
-- **Aug 12, 2025**: Drafted component-level data flow for screen and service interaction  
-- **Aug 13, 2025**: Designed folder structure, initialized Flutter project, and connected Firebase  
-- **Aug 14, 2025**: Implemented the Home screen UI layout  
-- **Aug 15, 2025**: Connected Firestore DB, set up Firebase Authentication, implemented `AuthProvider` class and `AuthWrapper` routing system  
-- **Aug 16, 2025**: Built `LoginScreen` UI, implemented auto-login state, created `UserProvider` state management, added user data CRUD and real-time sync logic  
-- **Aug 22, 2025**: Created `HomeScreen` base structure, implemented top cache info section, circular progress bar, cache progress logic, animated box tab, and coin collection system  
-- **Aug 23, 2025**: Fixed `collectCash()` method bug, built MyPage UI, added percentage progress indicator, and logout feature  
-- **Aug 26, 2025**: Designed `StoreScreen` UI, built `GridView` for reward items, and researched brand partnerships  
-- **Aug 28, 2025**: Developed `KeyboardScreen` UI, adjusted per-character coin logic, added daily 100-coin limit, and improved real-time cache updates  
-- **Aug 30, 2025**: Implemented `MainNavigationScreen` with 4 fixed bottom tabs and tab transition animations  
-
-- **Sep 1, 2025**: Refined coin collection tab animation, updated top and bottom tab UI on Home screen  
-- **Sep 3, 2025**: Improved coin box UI and adjusted the number of boxes  
-- **Sep 4, 2025**: Researched reward partnerships, ad formats, and Google AdMob integration options  
-- **Sep 5, 2025**: Fixed login-related errors  
-- **Sep 6, 2025**: Integrated `BannerAd.mediumRectangle`, enabled test ads via Google AdMob  
-- **Sep 8, 2025**: Handled ad load errors, improved 'How to Use' button UI on Home screen, adjusted coin display UI, and refined animation timing  
-- **Sep 10, 2025**: Initial GitHub upload and first version of the README  
-
----
-
 ## 🚀 Tech Stack Overview
 
 | Layer         | Technology                        |
@@ -63,7 +23,7 @@ AppTech is a reward-based mobile application where users can earn virtual cash b
 | State Mgmt    | Provider Pattern                  |
 | Backend       | Firebase (Auth + Firestore)       |
 | Ads           | Google AdMob                      |
-| Platforms     | iOS, Android, Web (in progress)   |
+| Platforms     | iOS, Android, Web 		    |
 | Planned Cloud | AWS Lambda, API Gateway, DynamoDB |
 
 ---
@@ -96,6 +56,42 @@ apptech/
 │   ├── ios/
 │   └── web/
 └── backend/ (planned)
+```
+
+---
+
+## 📸 Screens Overview *(Screenshots Coming Soon)*
+
+* **Home Screen**: Real-time progress bar, daily goal indicator, bonus reward display
+* **Typing Screen**: Live character counter, animated feedback, debounce optimization
+* **Store Screen**: Grid layout gifticon items, point balance, and purchase flow
+* **Profile Screen**: Total stats, session logs, settings, and logout option
+
+---
+
+## 🚧 Getting Started
+
+### Prerequisites
+
+* Flutter SDK >= 3.0.0
+* Dart SDK >= 2.17.0
+* Firebase project setup (Auth + Firestore)
+
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/zpdl768/apptech-frontend.git
+cd apptech-frontend
+
+# Install dependencies
+flutter pub get
+
+# Configure Firebase
+# (firebase_options.dart required)
+
+# Run the app
+flutter run
 ```
 
 ---

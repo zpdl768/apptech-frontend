@@ -297,7 +297,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   border: Border.all(color: Colors.grey.shade300), // 연한 회색 테두리
                   color: Colors.grey.shade50,                 // 연한 회색 배경
                 ),
-                child: _isBannerAdReady && _bannerAd != null
+              child: _isBannerAdReady && _bannerAd != null
                     ? // 광고 로딩 완료 시: 실제 AdMob 배너 광고 표시
                       ClipRRect(
                         borderRadius: BorderRadius.circular(16), // 컨테이너와 동일한 둥근 모서리
@@ -470,7 +470,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               Padding(
                 padding: const EdgeInsets.only(right: 16),
                 child: Container(
-                  width: 130,  // 고정 너비
+                  width: 116,  // 고정 너비
                   height: 32,  // 고정 높이
                   decoration: BoxDecoration(
                     color: Colors.grey.shade200,           // 연한 회색 배경
@@ -480,7 +480,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     children: [
                       SizedBox(width: 8),
                       Icon(Icons.monetization_on, color: Colors.amber, size: 18), // 코인 아이콘
-                      SizedBox(width: 36),
+                      SizedBox(width: 24),
                       Expanded(
                         child: Text(
                           '${user.totalCash} 캐시', // 사용자의 총 보유 캐시
