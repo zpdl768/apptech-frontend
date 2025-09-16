@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
-import 'register_screen.dart'; // TODO: Fix import issue
+import 'register_screen.dart';
+import 'forgot_password_screen.dart';
+import '../widgets/password_strength_indicator.dart';
 
+/// AppTech 로그인 화면
+/// Firebase Authentication을 통한 이메일/비밀번호 로그인 기능 제공
+/// 회원가입 화면으로의 네비게이션 및 테스트용 계정 안내 포함
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -10,39 +15,70 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
+/// LoginScreen의 상태 관리 클래스
+/// 로그인 폼 처리, Firebase 인증, 화면 전환을 담당
 class _LoginScreenState extends State<LoginScreen> {
+  
+  // ===== 폼 컨트롤 및 상태 변수 =====
+  
+  /// 로그인 폼의 validation을 관리하는 GlobalKey
   final _formKey = GlobalKey<FormState>();
+  
+  /// 이메일 입력 필드 컨트롤러
   final _emailController = TextEditingController();
+  
+  /// 비밀번호 입력 필드 컨트롤러
   final _passwordController = TextEditingController();
+  
+  /// 비밀번호 표시/숨김 토글 상태 (false: 숨김, true: 표시)
   bool _isPasswordVisible = false;
 
+  // ===== 생명주기 관리 메서드 =====
+  
+  /// 위젯 해제 시 리소스 정리
+  /// TextEditingController 메모리 해제로 메모리 누수 방지
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _emailController.dispose();   // 이메일 컨트롤러 해제
+    _passwordController.dispose(); // 비밀번호 컨트롤러 해제
     super.dispose();
   }
 
+  // ===== Firebase 로그인 처리 메서드 =====
+  
+  /// 로그인 버튼 클릭 시 실행되는 Firebase 인증 처리 메서드
+  /// 폼 validation → Firebase 로그인 → 결과에 따른 UI 피드백 순서로 진행
   Future<void> _handleLogin() async {
+    // 1단계: 폼 validation 검사 (이메일 형식, 비밀번호 길이 등)
     if (_formKey.currentState!.validate()) {
+      // 2단계: AuthProvider를 통해 Firebase Authentication 접근
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       
+      // 3단계: Firebase 로그인 시도
+      // trim(): 앞뒤 공백 제거로 입력 오류 방지
       final success = await authProvider.signInWithEmailAndPassword(
-        _emailController.text.trim(),
-        _passwordController.text.trim(),
+        _emailController.text.trim(),  // 이메일 입력값 (공백 제거)
+        _passwordController.text.trim(), // 비밀번호 입력값 (공백 제거)
       );
 
+      // 4단계: 로그인 실패 시 사용자에게 에러 메시지 표시
+      // mounted 체크: 위젯이 아직 화면에 있는지 확인 (비동기 안전성)
       if (mounted && !success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.'),
-            backgroundColor: Colors.red,
+            backgroundColor: Colors.red, // 빨간색 배경으로 에러임을 시각적으로 표시
           ),
         );
       }
+      // 로그인 성공 시: AuthProvider의 authStateChanges()가 자동으로 HomeScreen으로 이동
     }
   }
 
+  // ===== 화면 네비게이션 메서드 =====
+  
+  /// 회원가입 화면으로 이동하는 메서드
+  /// "회원가입" 텍스트 버튼 클릭 시 실행
   void _navigateToRegister() {
     Navigator.push(
       context,
@@ -50,19 +86,32 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  /// 비밀번호 찾기 화면으로 이동하는 메서드
+  /// "비밀번호 찾기" 텍스트 버튼 클릭 시 실행
+  void _navigateToForgotPassword() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
+    );
+  }
+
+  // ===== 메인 UI 빌드 메서드 =====
+  
+  /// 로그인 화면의 전체 UI를 구성하는 메인 빌드 메서드
+  /// 앱 로고, 로그인 폼, 회원가입 링크, 테스트 계정 안내로 구성
   @override
   Widget build(BuildContext context) {  
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.white, // 전체 배경색: 흰색
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(24),
+        child: SingleChildScrollView( // 키보드 올라와도 스크롤 가능하도록
+          padding: EdgeInsets.all(24), // 전체 여백 24px
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.stretch, // 가로 전체 너비 사용
             children: [
-              SizedBox(height: 60),
+              SizedBox(height: 60), // 상단 여백
               
-              // 로고 및 타이틀
+              // ===== 앱 로고 및 타이틀 섹션 =====
               Center(
                 child: Column(
                   children: [
@@ -164,6 +213,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (value == null || value.isEmpty) {
                           return '비밀번호를 입력해주세요';
                         }
+                        // 로그인 시에는 기본적인 길이 체크만 (기존 사용자 고려)
                         if (value.length < 6) {
                           return '비밀번호는 6자 이상이어야 합니다';
                         }
@@ -210,7 +260,24 @@ class _LoginScreenState extends State<LoginScreen> {
                 },
               ),
               
-              SizedBox(height: 24),
+              SizedBox(height: 16),
+              
+              // 비밀번호 찾기 링크 (중앙 정렬)
+              Center(
+                child: TextButton(
+                  onPressed: _navigateToForgotPassword,
+                  child: Text(
+                    '비밀번호를 잊으셨나요?',
+                    style: TextStyle(
+                      color: Colors.deepPurple,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+              
+              SizedBox(height: 16),
               
               // 회원가입 링크
               Row(

@@ -4,6 +4,8 @@ import 'dart:ui';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 import '../providers/auth_provider.dart';
 import '../providers/user_provider.dart';
+import '../models/user_model.dart';
+import '../services/reward_ad_service.dart';
 import 'keyboard_screen.dart';
 import 'store_screen.dart';
 import 'profile_screen.dart';
@@ -36,6 +38,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   
   /// 배너 광고 로딩 완료 여부
   bool _isBannerAdReady = false;
+  
+  /// 리워드 광고 서비스 인스턴스
+  final RewardAdService _rewardAdService = RewardAdService();
   
   // ===== 코인 터치 애니메이션 관련 변수 =====
   
@@ -85,14 +90,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       listener: BannerAdListener(
         // 광고 로딩 성공 시
         onAdLoaded: (Ad ad) {
-          print('Banner Ad loaded.');
+          debugPrint('Banner Ad loaded.');
           setState(() {
             _isBannerAdReady = true; // 광고 표시 준비 완료
           });
         },
         // 광고 로딩 실패 시
         onAdFailedToLoad: (Ad ad, LoadAdError error) {
-          print('Banner Ad failed to load: $error');
+          debugPrint('Banner Ad failed to load: $error');
           ad.dispose();
           setState(() {
             _isBannerAdReady = false; // 광고 표시 불가 상태
@@ -136,25 +141,226 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void dispose() {
     _coinAnimationController.dispose(); // 애니메이션 컨트롤러 해제
-    _bannerAd?.dispose();               // 광고 인스턴스 해제
+    _bannerAd?.dispose();               // 배너 광고 인스턴스 해제
+    _rewardAdService.dispose();         // 리워드 광고 서비스 해제
     super.dispose();
   }
 
-  // ===== 유틸리티 메서드 =====
+  // ===== 캐시 상자 UI 관련 유틸리티 메서드 =====
   
-  /// 캐시 상자의 인덱스에 따라 적절한 아이콘을 반환하는 메서드 (현재 미사용)
-  /// 6개의 다른 아이콘을 순환하여 반환
-  /// [index]: 캐시 상자의 인덱스
-  IconData _getBoxIcon(int index) {
-    switch (index % 6) {
-      case 0: return Icons.card_giftcard;     // 1번: 선물상자/보물상자
-      case 1: return Icons.redeem;            // 2번: 보상/선물 상자
-      case 2: return Icons.shopping_bag;      // 3번: 쇼핑백/보물 가방
-      case 3: return Icons.backpack;          // 4번: 배낭/보물 가방
-      case 4: return Icons.savings;           // 5번: 저축/보물
-      case 5: return Icons.account_balance_wallet; // 6번: 지갑/보물
-      default: return Icons.card_giftcard;
+  /// 상자 상태별 배경색을 반환하는 메서드
+  Color _getBoxBackgroundColor(BoxState state) {
+    switch (state) {
+      case BoxState.locked:
+        return Colors.grey.shade100;      // 잠긴 상태: 연한 회색
+      case BoxState.available:
+        return Colors.amber.shade50;      // 사용 가능: 연한 황금색 (빛나는 효과)
+      case BoxState.completed:
+        return Colors.green.shade50;      // 완료: 연한 초록색
     }
+  }
+  
+  /// 상자 상태별 테두리색을 반환하는 메서드
+  Color _getBoxBorderColor(BoxState state) {
+    switch (state) {
+      case BoxState.locked:
+        return Colors.grey.shade300;      // 잠긴 상태: 회색 테두리
+      case BoxState.available:
+        return Colors.amber.shade400;     // 사용 가능: 황금색 테두리
+      case BoxState.completed:
+        return Colors.green.shade400;     // 완료: 초록색 테두리
+    }
+  }
+  
+  /// 상자 상태별 아이콘 색상을 반환하는 메서드
+  Color _getBoxIconColor(BoxState state) {
+    switch (state) {
+      case BoxState.locked:
+        return Colors.grey.shade400;      // 잠긴 상태: 회색
+      case BoxState.available:
+        return Colors.amber.shade700;     // 사용 가능: 진한 황금색
+      case BoxState.completed:
+        return Colors.green.shade600;     // 완료: 진한 초록색
+    }
+  }
+  
+  /// 상자 상태별 텍스트 색상을 반환하는 메서드
+  Color _getBoxTextColor(BoxState state) {
+    switch (state) {
+      case BoxState.locked:
+        return Colors.grey.shade600;      // 잠긴 상태: 회색
+      case BoxState.available:
+        return Colors.amber.shade800;     // 사용 가능: 진한 황금색
+      case BoxState.completed:
+        return Colors.green.shade700;     // 완료: 진한 초록색
+    }
+  }
+  
+  /// 상자 인덱스와 상태에 따라 적절한 아이콘을 반환하는 메서드
+  IconData _getBoxIcon(int index, BoxState state) {
+    if (state == BoxState.completed) {
+      return Icons.check_circle; // 완료된 상자는 체크 아이콘
+    }
+    
+    // 10번째 상자(index 9)는 저금통, 나머지는 모두 코인
+    if (index == 9) {
+      return Icons.savings; // 10번째 상자: 저금통
+    } else {
+      return Icons.monetization_on; // 1~9번째 상자: 코인
+    }
+  }
+  
+  /// 상자 상태와 필요 글자수에 따른 텍스트를 반환하는 메서드
+  String _getBoxText(BoxState state, int requiredChars) {
+    switch (state) {
+      case BoxState.locked:
+        return '$requiredChars자\n필요'; // 잠긴 상태: 필요한 글자수 표시
+      case BoxState.available:
+        return '광고 시청\n가능!';        // 사용 가능: 광고 시청 안내
+      case BoxState.completed:
+        return '수집 완료';              // 완료: 수집 완료 표시
+    }
+  }
+  
+  /// 캐시 상자가 탭되었을 때 호출되는 메서드
+  void _onRewardBoxTapped(int index, BoxState state) {
+    switch (state) {
+      case BoxState.locked:
+        // 잠긴 상자: 필요한 글자수 안내 스낵바 표시
+        final requiredChars = (index + 1) * 100;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$requiredChars자를 입력하면 이 상자가 활성화됩니다!'),
+            backgroundColor: Colors.grey.shade600,
+            duration: Duration(seconds: 2),
+          ),
+        );
+        break;
+        
+      case BoxState.available:
+        // 활성화된 상자: 리워드 광고 시청 (향후 AdMob 구현)
+        _showRewardAd(index);
+        break;
+        
+      case BoxState.completed:
+        // 완료된 상자: 완료 상태 안내 스낵바 표시
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('이미 수집 완료한 상자입니다!'),
+            backgroundColor: Colors.green.shade600,
+            duration: Duration(seconds: 2),
+          ),
+        );
+        break;
+    }
+  }
+  
+  /// 리워드 광고를 표시하는 메서드
+  Future<void> _showRewardAd(int boxIndex) async {
+    // 광고가 준비되지 않은 경우 로딩 시도
+    if (!_rewardAdService.isReady) {
+      if (!_rewardAdService.isLoading) {
+        // 광고 로딩 시작
+        _showLoadingDialog('광고를 준비 중입니다...');
+        
+        await _rewardAdService.loadRewardedAd(
+          onAdLoaded: () {
+            // 로딩 완료 시 다이얼로그 닫기
+            if (mounted) Navigator.pop(context);
+            // 광고 표시
+            _displayRewardAd(boxIndex);
+          },
+          onAdFailedToLoad: (error) {
+            // 로딩 실패 시
+            if (mounted) {
+              Navigator.pop(context); // 로딩 다이얼로그 닫기
+              _showErrorDialog('광고 로딩 실패', '잠시 후 다시 시도해주세요.\n\n$error');
+            }
+          },
+        );
+      } else {
+        // 이미 로딩 중인 경우
+        _showErrorDialog('광고 준비 중', '광고를 준비 중입니다. 잠시 후 다시 시도해주세요.');
+      }
+      return;
+    }
+    
+    // 광고가 준비된 경우 바로 표시
+    await _displayRewardAd(boxIndex);
+  }
+  
+  /// 실제 리워드 광고를 표시하는 메서드
+  Future<void> _displayRewardAd(int boxIndex) async {
+    final success = await _rewardAdService.showRewardedAd(
+      onUserEarnedReward: (rewardAmount) async {
+        // 광고 시청 완료 시 캐시 지급
+        final userProvider = Provider.of<UserProvider>(context, listen: false);
+        final actualReward = await userProvider.completeRewardAd(boxIndex);
+        
+        if (actualReward > 0 && mounted) {
+          // 성공적으로 캐시를 받은 경우
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('🎉 축하합니다! $actualReward 캐시를 획득했습니다!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 3),
+              action: SnackBarAction(
+                label: '확인',
+                textColor: Colors.white,
+                onPressed: () {},
+              ),
+            ),
+          );
+        }
+      },
+      onAdFailedToShow: (error) {
+        if (mounted) {
+          _showErrorDialog('광고 표시 실패', '광고를 표시할 수 없습니다.\n\n$error');
+        }
+      },
+    );
+    
+    if (!success) {
+      // 광고 표시 실패
+      if (mounted) {
+        _showErrorDialog('광고 오류', '광고를 표시할 수 없습니다. 잠시 후 다시 시도해주세요.');
+      }
+    }
+  }
+  
+  /// 로딩 다이얼로그를 표시하는 메서드
+  void _showLoadingDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Expanded(child: Text(message)),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  /// 에러 다이얼로그를 표시하는 메서드
+  void _showErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+            child: Text('확인'),
+          ),
+        ],
+      ),
+    );
   }
 
   // ===== UI 구성 메서드 =====
@@ -165,6 +371,29 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return Consumer<UserProvider>(
       builder: (context, userProvider, child) {
         final user = userProvider.currentUser!;
+        
+        // 에러 상태 체크 및 SnackBar 표시
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (userProvider.lastError != null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(userProvider.lastError!),
+                backgroundColor: userProvider.isDailyLimitReached 
+                  ? Colors.orange.shade700 
+                  : Colors.red.shade700,
+                duration: Duration(seconds: 4),
+                action: SnackBarAction(
+                  label: '확인',
+                  textColor: Colors.white,
+                  onPressed: () {
+                    userProvider.clearError();
+                  },
+                ),
+              ),
+            );
+            userProvider.clearError();
+          }
+        });
         
         // 복잡한 캐시 관련 계산들
         final currentCash = (user.todayCharCount ~/ 10).clamp(0, maxCashPerDay);           // 현재 적립된 캐시 (최대 100)
@@ -277,12 +506,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
               SizedBox(height: 16),
               
-              // ===== 일일 캐시 한도 달성 경고 메시지 =====
-              // 하루 최대 캐시(100캐시) 달성 시에만 표시되는 경고 메시지
+              // ===== 타이핑 캐시 경고 메시지 (기존 100캐시 한도) =====
+              // 하루 최대 타이핑 캐시(100캐시) 달성 시에만 표시되는 경고 메시지
               if (currentCash >= maxCashPerDay)
                 Text(
-                  '❗ 오늘 $maxCashPerDay캐시 모두 적립했습니다 ❗',
-                  style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+                  '📝 오늘 타이핑으로 $maxCashPerDay캐시 모두 적립했습니다',
+                  style: TextStyle(color: Colors.orange.shade700, fontWeight: FontWeight.bold),
                 ),
               SizedBox(height: 16),
               
@@ -323,42 +552,59 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               SizedBox(height: 16),
               
               // ===== 수평 스크롤 캐시 상자들 섹션 =====
-              // 향후 추가 캐시 획득 방법들을 표시하는 수평 스크롤 리스트 (현재 플레이스홀더)
+              // 리워드 광고를 통한 추가 캐시 획득 방법들을 표시하는 수평 스크롤 리스트
               SizedBox(
                 height: 90, // 고정 높이 90px
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal, // 수평 스크롤
                   itemCount: 10,                   // 총 10개의 캐시 상자
                   itemBuilder: (_, index) {
+                    // 상자 활성화에 필요한 글자수 계산 (100, 200, 300, ..., 1000)
+                    final requiredChars = (index + 1) * 100;
+                    final boxState = user.getBoxState(index);
+                    
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8.0), // 상자간 16px 간격
-                      child: Container(
-                        width: 105, // 각 상자의 고정 너비
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),      // 둥근 모서리
-                          color: Colors.amber.shade50,                  // 연한 황금색 배경
-                          border: Border.all(color: Colors.amber.shade300), // 황금색 테두리
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            // 캐시 상자 아이콘 (마지막 상자만 다른 아이콘)
-                            Icon(
-                              index == 9 ? Icons.savings : Icons.monetization_on, // 10번째: 저축통, 나머지: 코인
-                              size: 45,                                           // 45px 크기
-                              color: Colors.amber.shade700,                       // 진한 황금색
-                            ),
-                            SizedBox(height: 8),
-                            // 캐시 상자 설명 텍스트
-                            Text(
-                              '추가 캐시 받기', // 모든 상자 동일한 텍스트 (향후 개별화 예정)
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.brown.shade700, // 갈색 텍스트
+                      child: GestureDetector(
+                        onTap: () => _onRewardBoxTapped(index, boxState),
+                        child: Container(
+                          width: 105, // 각 상자의 고정 너비
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(12), // 둥근 모서리
+                            color: _getBoxBackgroundColor(boxState), // 상태별 배경색
+                            border: Border.all(color: _getBoxBorderColor(boxState), width: 2), // 상태별 테두리색
+                            boxShadow: boxState == BoxState.available ? [
+                              BoxShadow(
+                                color: Colors.amber.withValues(alpha: 0.3),
+                                blurRadius: 8,
+                                spreadRadius: 1,
                               ),
-                            ),
-                          ],
+                            ] : null, // 활성화된 상자만 그림자 효과
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // 상태별 아이콘 표시
+                              Icon(
+                                _getBoxIcon(index, boxState),
+                                size: 32,
+                                color: _getBoxIconColor(boxState),
+                              ),
+                              SizedBox(height: 6),
+                              // 상태별 텍스트 표시
+                              Text(
+                                _getBoxText(boxState, requiredChars),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: _getBoxTextColor(boxState),
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -397,6 +643,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     
     // ===== Google AdMob 광고 로딩 시작 =====
     _loadBannerAd();
+    
+    // ===== 리워드 광고 미리 로딩 (1개만) =====
+    // 사용자가 상자를 터치했을 때 즉시 광고를 표시할 수 있도록 미리 1개 로딩
+    _rewardAdService.loadRewardedAd(
+      onAdLoaded: () => debugPrint('리워드 광고: 초기 로딩 완료'),
+      onAdFailedToLoad: (error) => debugPrint('리워드 광고: 초기 로딩 실패 - $error'),
+    );
     
     // ===== 위젯 빌드 완료 후 사용자 데이터 로드 =====
     // 화면 렌더링이 완료된 후 비동기적으로 실행

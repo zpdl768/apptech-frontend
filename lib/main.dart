@@ -2,12 +2,15 @@
 // Flutter, Firebase, Provider, Google AdMob을 활용한 타이핑 캐시 적립 앱
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';             // kIsWeb 플래그
 import 'package:firebase_core/firebase_core.dart';    // Firebase 초기화
 import 'package:provider/provider.dart';              // 상태 관리
 import 'package:google_mobile_ads/google_mobile_ads.dart';  // AdMob 광고
 import 'widgets/auth_wrapper.dart';                   // 인증 래퍼 위젯
 import 'providers/auth_provider.dart';                // Firebase 인증 프로바이더
 import 'providers/user_provider.dart';                // 사용자 데이터 프로바이더
+import 'services/functions_service.dart';             // Firebase Functions 서비스
+import 'firebase_options.dart';                       // Firebase 플랫폼별 설정
 
 /// AppTech 앱의 메인 엔트리 포인트
 /// Firebase와 AdMob 초기화 후 Flutter 앱을 실행하는 비동기 메인 함수
@@ -21,11 +24,15 @@ void main() async {
   
   // ===== Firebase 초기화 =====
   // Firebase Authentication, Firestore 등 Firebase 서비스 초기화
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   
   // ===== Google AdMob 초기화 =====
-  // 광고 수익화를 위한 AdMob SDK 초기화
-  await MobileAds.instance.initialize();
+  // 광고 수익화를 위한 AdMob SDK 초기화 (웹에서는 지원하지 않음)
+  if (!kIsWeb) {
+    await MobileAds.instance.initialize();
+  }
   
   // ===== Flutter 앱 실행 =====
   runApp(const MyApp());  // MyApp 위젯을 루트로 하는 Flutter 앱 시작
@@ -34,8 +41,37 @@ void main() async {
 /// AppTech 앱의 루트 위젯
 /// Provider 패턴으로 전역 상태 관리를 설정하고 MaterialApp으로 앱 테마와 초기 화면을 구성
 /// AuthProvider와 UserProvider를 통해 인증 상태와 사용자 데이터를 앱 전체에서 공유
-class MyApp extends StatelessWidget {
+/// 앱 시작 시 Firebase Functions를 통한 일일 리셋 체크 수행
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeApp();
+  }
+
+  /// 앱 초기화: Firebase Functions를 통한 일일 리셋 체크
+  /// 사용자가 로그인한 후에 실행되어야 하므로 AuthWrapper에서 실행하는 것이 더 적절할 수 있음
+  Future<void> _initializeApp() async {
+    try {
+      // Firebase Functions를 통한 일일 리셋 체크
+      final wasReset = await FunctionsService().initializeApp();
+      
+      if (wasReset) {
+        debugPrint('일일 리셋이 실행되었습니다.');
+      }
+    } catch (error) {
+      debugPrint('앱 초기화 실패: $error');
+      // 초기화 실패해도 앱은 사용 가능하도록 함
+    }
+  }
 
   // ===== 앱 루트 위젯 빌드 메서드 =====
   

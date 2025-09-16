@@ -110,6 +110,34 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  // ===== 비밀번호 재설정 메서드 =====
+  
+  /// 이메일을 통한 비밀번호 재설정 링크 발송 메서드
+  /// [email]: 비밀번호를 재설정할 사용자의 이메일 주소
+  /// Returns: 발송 성공시 true, 실패시 false
+  /// 
+  /// 비밀번호 재설정 프로세스:
+  /// 1. 로딩 상태 활성화 → 2. Firebase에 재설정 이메일 요청 → 3. 성공/실패 상태 반환 → 4. 로딩 상태 해제
+  Future<bool> sendPasswordResetEmail(String email) async {
+    try {
+      _isLoading = true;               // 로딩 상태 시작
+      notifyListeners();               // UI에 로딩 상태 알림
+
+      // Firebase Authentication으로 비밀번호 재설정 이메일 발송
+      await _auth.sendPasswordResetEmail(
+        email: email.trim(),           // 입력받은 이메일 (공백 제거)
+      );
+      
+      return true;                     // 발송 성공
+    } catch (e) {
+      debugPrint('비밀번호 재설정 에러: $e'); // 콘솔에 에러 로그 출력 (이메일 없음, 네트워크 오류 등)
+      return false;                    // 발송 실패
+    } finally {
+      _isLoading = false;              // 로딩 상태 종료
+      notifyListeners();               // UI에 최종 상태 알림
+    }
+  }
+
   // ===== 로그아웃 메서드 =====
   
   /// 현재 로그인된 사용자를 로그아웃 처리하는 메서드
