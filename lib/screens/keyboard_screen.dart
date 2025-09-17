@@ -205,12 +205,12 @@ class _KeyboardScreenState extends State<KeyboardScreen> {
                             ],
                           ),
                         ),
-                        // 두 번째 열: 오늘 적립 캐시 / 최대 한도
+                        // 두 번째 열: 오늘 적립 캐시
                         Expanded(
                           child: Column(
                             children: [
                               Text('오늘 캐시', style: TextStyle(fontSize: 12, color: Colors.grey)), // 라벨
-                              Text('$todayCash / $maxCash', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), // 현재/최대
+                              Text('$todayCash', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), // 현재 캐시만 표시
                             ],
                           ),
                         ),

@@ -124,6 +124,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white, // 전체 배경색: 흰색
+      resizeToAvoidBottomInset: true, // 키보드가 올라올 때 화면 크기 조정
       
       // ===== 상단 앱바 (뒤로가기 버튼 + 제목) =====
       appBar: AppBar(
@@ -139,11 +140,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // ===== 메인 콘텐츠 영역 =====
       body: SafeArea(
         child: SingleChildScrollView( // 키보드 올라와도 스크롤 가능하도록
+          physics: ClampingScrollPhysics(), // 부드러운 스크롤 제공
           padding: EdgeInsets.all(24), // 전체 여백 24px
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch, // 가로 전체 너비 사용
             children: [
-              SizedBox(height: 20), // 상단 여백
+              SizedBox(height: 10), // 상단 여백 축소 (20 → 10)
               
               // ===== 앱 로고 및 타이틀 섹션 =====
               Center(
@@ -186,7 +188,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ),
               
-              SizedBox(height: 40),
+              SizedBox(height: 24),
               
               // 회원가입 폼
               Form(
@@ -197,6 +199,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next, // 다음 필드로 이동
+                      onFieldSubmitted: (_) {
+                        FocusScope.of(context).nextFocus(); // 비밀번호 필드로 포커스 이동
+                      },
                       decoration: InputDecoration(
                         labelText: '이메일',
                         prefixIcon: Icon(Icons.email_outlined),
@@ -225,6 +231,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextFormField(
                       controller: _passwordController,
                       obscureText: !_isPasswordVisible,
+                      textInputAction: TextInputAction.next, // 다음 필드로 이동
+                      onFieldSubmitted: (_) {
+                        FocusScope.of(context).nextFocus(); // 비밀번호 확인 필드로 포커스 이동
+                      },
                       decoration: InputDecoration(
                         labelText: '비밀번호',
                         prefixIcon: Icon(Icons.lock_outline),
@@ -271,6 +281,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextFormField(
                       controller: _confirmPasswordController,
                       obscureText: !_isConfirmPasswordVisible,
+                      textInputAction: TextInputAction.done, // 완료 액션
+                      onFieldSubmitted: (_) => _handleRegister(), // 엔터 시 회원가입 실행
                       decoration: InputDecoration(
                         labelText: '비밀번호 확인',
                         prefixIcon: Icon(Icons.lock_outline),
@@ -303,7 +315,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ),
               
-              SizedBox(height: 32),
+              SizedBox(height: 24),
               
               // 회원가입 버튼
               Consumer<AuthProvider>(
@@ -339,7 +351,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 },
               ),
               
-              SizedBox(height: 24),
+              SizedBox(height: 16),
               
               // 로그인으로 이동
               Row(
@@ -362,7 +374,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ],
               ),
               
-              SizedBox(height: 40),
+              SizedBox(height: 24),
               
               // 정보 안내
               Container(

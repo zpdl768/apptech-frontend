@@ -103,32 +103,34 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {  
     return Scaffold(
       backgroundColor: Colors.white, // 전체 배경색: 흰색
+      resizeToAvoidBottomInset: true, // 키보드가 올라올 때 화면 크기 조정
       body: SafeArea(
         child: SingleChildScrollView( // 키보드 올라와도 스크롤 가능하도록
+          physics: ClampingScrollPhysics(), // 부드러운 스크롤 제공
           padding: EdgeInsets.all(24), // 전체 여백 24px
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch, // 가로 전체 너비 사용
             children: [
-              SizedBox(height: 60), // 상단 여백
+              SizedBox(height: 20), // 상단 여백 축소 (60 → 20)
               
               // ===== 앱 로고 및 타이틀 섹션 =====
               Center(
                 child: Column(
                   children: [
                     Container(
-                      width: 100,
-                      height: 100,
+                      width: 80,
+                      height: 80,
                       decoration: BoxDecoration(
                         color: Colors.deepPurple,
-                        borderRadius: BorderRadius.circular(25),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: Icon(
                         Icons.monetization_on,
                         color: Colors.white,
-                        size: 50,
+                        size: 40,
                       ),
                     ),
-                    SizedBox(height: 24),
+                    SizedBox(height: 16),
                     Text(
                       'AppTech',
                       style: TextStyle(
@@ -149,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               
-              SizedBox(height: 50),
+              SizedBox(height: 30),
               
               // 로그인 폼
               Form(
@@ -160,6 +162,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next, // 다음 필드로 이동
+                      onFieldSubmitted: (_) {
+                        FocusScope.of(context).nextFocus(); // 비밀번호 필드로 포커스 이동
+                      },
                       decoration: InputDecoration(
                         labelText: '이메일',
                         prefixIcon: Icon(Icons.email_outlined),
@@ -182,12 +188,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       },
                     ),
                     
-                    SizedBox(height: 16),
+                    SizedBox(height: 12),
                     
                     // 비밀번호 입력
                     TextFormField(
                       controller: _passwordController,
                       obscureText: !_isPasswordVisible,
+                      textInputAction: TextInputAction.done, // 완료 액션
+                      onFieldSubmitted: (_) => _handleLogin(), // 엔터 시 로그인 실행
                       decoration: InputDecoration(
                         labelText: '비밀번호',
                         prefixIcon: Icon(Icons.lock_outline),
@@ -224,7 +232,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               
-              SizedBox(height: 32),
+              SizedBox(height: 24),
               
               // 로그인 버튼
               Consumer<AuthProvider>(
@@ -260,7 +268,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 },
               ),
               
-              SizedBox(height: 16),
+              SizedBox(height: 12),
               
               // 비밀번호 찾기 링크 (중앙 정렬)
               Center(
@@ -277,7 +285,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
               
-              SizedBox(height: 16),
+              SizedBox(height: 12),
               
               // 회원가입 링크
               Row(
@@ -300,7 +308,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
               
-              SizedBox(height: 40),
+              SizedBox(height: 20),
               
               // 임시 데모 계정 안내
               Container(
