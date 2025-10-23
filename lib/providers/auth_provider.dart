@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../models/user_model.dart';
 
 /// AppTech Firebase 인증 프로바이더
 /// Firebase Authentication을 통한 사용자 로그인/회원가입/로그아웃을 관리하는 상태 관리 클래스
@@ -10,6 +12,9 @@ class AuthProvider extends ChangeNotifier {
   
   /// Firebase Authentication 인스턴스
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  
+  /// Cloud Firestore 인스턴스
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
   /// 현재 로그인된 사용자 정보 (로그인되지 않은 경우 null)
   User? _user;
@@ -41,8 +46,14 @@ class AuthProvider extends ChangeNotifier {
   /// 사용자가 다른 기기에서 로그인/로그아웃하거나 토큰이 만료되어도 자동으로 상태 업데이트
   AuthProvider() {
     // Firebase 인증 상태 변화 감지 리스너 설정
-    _auth.authStateChanges().listen((User? user) {
+    _auth.authStateChanges().listen((User? user) async {
       _user = user;                    // 사용자 정보 업데이트
+      
+      // 사용자가 로그인된 상태이면 프로필 확인/생성
+      if (user != null) {
+        await _ensureUserProfile(user);
+      }
+      
       _isInitializing = false;         // 초기화 완료 상태로 변경
       notifyListeners();               // UI에 상태 변화 알림
     });
@@ -69,6 +80,12 @@ class AuthProvider extends ChangeNotifier {
       );
       
       _user = credential.user;         // 로그인 성공시 사용자 정보 저장
+      
+      // 로그인 성공 후 Firestore에 사용자 프로필 확인 및 없으면 생성
+      if (_user != null) {
+        await _ensureUserProfile(_user!);
+      }
+      
       return true;                     // 성공 반환
     } catch (e) {
       debugPrint('로그인 에러: $e');    // 콘솔에 에러 로그 출력 (개발용)
@@ -100,6 +117,12 @@ class AuthProvider extends ChangeNotifier {
       );
       
       _user = credential.user;         // 회원가입 성공시 자동으로 로그인된 사용자 정보 저장
+      
+      // 회원가입 성공 후 Firestore에 사용자 프로필 자동 생성
+      if (_user != null) {
+        await _ensureUserProfile(_user!);
+      }
+      
       return true;                     // 성공 반환
     } catch (e) {
       debugPrint('회원가입 에러: $e');   // 콘솔에 에러 로그 출력 (이메일 중복, 비밀번호 규칙 위반 등)
@@ -135,6 +158,47 @@ class AuthProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;              // 로딩 상태 종료
       notifyListeners();               // UI에 최종 상태 알림
+    }
+  }
+
+  // ===== 사용자 프로필 자동 생성 메서드 =====
+  
+  /// 사용자 프로필이 Firestore에 존재하는지 확인하고 없으면 자동 생성하는 메서드
+  /// Firebase Auth 로그인 성공 후 호출되어 Firestore에 사용자 데이터가 없는 경우 기본 프로필 생성
+  /// [user]: Firebase Auth에서 인증된 사용자 정보
+  /// 
+  /// 생성되는 기본 프로필:
+  /// - 총 캐시: 0, 오늘 타이핑: 0, 모든 상자 잠김 상태
+  /// - Firebase Functions에서 "User data not found" 에러 방지
+  Future<void> _ensureUserProfile(User user) async {
+    try {
+      // Firestore에서 해당 UID로 사용자 문서 존재 여부 확인
+      final userDoc = await _firestore.collection('users').doc(user.uid).get();
+      
+      if (!userDoc.exists) {
+        // 사용자 프로필이 없는 경우 기본 프로필 생성
+        final newUser = UserModel(
+          id: user.uid,                                        // Firebase Auth UID 사용
+          email: user.email ?? '',                            // 인증된 이메일 사용 (null이면 빈 문자열)
+          totalCash: 0,                                        // 초기 캐시: 0
+          todayCharCount: 0,                                   // 초기 타이핑 수: 0
+          collectedCash: 0,                                    // 초기 수집 캐시: 0
+          dailyCashEarned: 0,                                  // 초기 일일 획득 캐시: 0
+          boxStates: List.generate(10, (index) => BoxState.locked), // 10개 상자 모두 잠김 상태
+          createdAt: DateTime.now(),                           // 현재 시각으로 생성일 설정
+        );
+        
+        // Firestore에 새 사용자 프로필 저장
+        await _firestore.collection('users').doc(user.uid).set(newUser.toFirestore());
+        
+        debugPrint('새 사용자 프로필 생성 완료: ${user.uid} (${user.email})');
+      } else {
+        debugPrint('기존 사용자 프로필 확인 완료: ${user.uid}');
+      }
+    } catch (e) {
+      debugPrint('사용자 프로필 생성/확인 중 에러 발생: $e');
+      // 에러가 발생해도 로그인 자체는 성공한 상태로 유지
+      // Firebase Functions 호출 시 에러가 발생할 수 있지만 앱 사용에는 지장 없음
     }
   }
 

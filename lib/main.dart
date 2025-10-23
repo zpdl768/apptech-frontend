@@ -4,10 +4,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';             // kIsWeb 플래그
 import 'package:firebase_core/firebase_core.dart';    // Firebase 초기화
+import 'package:firebase_auth/firebase_auth.dart';    // Firebase Auth
+import 'package:cloud_firestore/cloud_firestore.dart';  // Cloud Firestore
 import 'package:provider/provider.dart';              // 상태 관리
 import 'package:google_mobile_ads/google_mobile_ads.dart';  // AdMob 광고
 import 'widgets/auth_wrapper.dart';                   // 인증 래퍼 위젯
-import 'providers/auth_provider.dart';                // Firebase 인증 프로바이더
+import 'providers/auth_provider.dart' as app_auth;    // Firebase 인증 프로바이더 (앱)
 import 'providers/user_provider.dart';                // 사용자 데이터 프로바이더
 import 'services/functions_service.dart';             // Firebase Functions 서비스
 import 'firebase_options.dart';                       // Firebase 플랫폼별 설정
@@ -27,6 +29,24 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  
+  // ===== Firebase 에뮬레이터 연결 (디버그 모드에서만) =====
+  if (kDebugMode) {
+    try {
+      // 에뮬레이터 호스트 설정 (모든 플랫폼이 동일한 에뮬레이터 인스턴스 사용)
+      String emulatorHost = '192.168.123.66';
+      
+      // Firebase Auth 에뮬레이터 연결
+      await FirebaseAuth.instance.useAuthEmulator(emulatorHost, 9099);
+      
+      // Firestore 에뮬레이터 연결
+      FirebaseFirestore.instance.useFirestoreEmulator(emulatorHost, 8088);
+      
+      debugPrint('Firebase 에뮬레이터 연결 성공: Auth(9099), Firestore(8088) - Host: $emulatorHost');
+    } catch (e) {
+      debugPrint('Firebase 에뮬레이터 연결 실패: $e');
+    }
+  }
   
   // ===== Google AdMob 초기화 =====
   // 광고 수익화를 위한 AdMob SDK 초기화 (웹에서는 지원하지 않음)
@@ -57,16 +77,13 @@ class _MyAppState extends State<MyApp> {
     _initializeApp();
   }
 
-  /// 앱 초기화: Firebase Functions를 통한 일일 리셋 체크
-  /// 사용자가 로그인한 후에 실행되어야 하므로 AuthWrapper에서 실행하는 것이 더 적절할 수 있음
+  /// 앱 초기화: Firebase 기본 설정만 수행
+  /// 일일 리셋 체크는 사용자 로그인 후 AuthWrapper에서 실행
   Future<void> _initializeApp() async {
     try {
-      // Firebase Functions를 통한 일일 리셋 체크
-      final wasReset = await FunctionsService().initializeApp();
-      
-      if (wasReset) {
-        debugPrint('일일 리셋이 실행되었습니다.');
-      }
+      // Firebase 기본 초기화는 이미 완료됨
+      // 일일 리셋 체크는 로그인 후에 수행하도록 AuthWrapper로 이동
+      debugPrint('앱 기본 초기화 완료');
     } catch (error) {
       debugPrint('앱 초기화 실패: $error');
       // 초기화 실패해도 앱은 사용 가능하도록 함
@@ -84,7 +101,7 @@ class _MyAppState extends State<MyApp> {
       // ===== 전역 상태 관리 프로바이더 설정 =====
       providers: [
         // Firebase 인증 상태 관리 프로바이더
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => app_auth.AuthProvider()),
         
         // 사용자 데이터(캐시, 타이핑 현황) 관리 프로바이더  
         ChangeNotifierProvider(create: (_) => UserProvider()),

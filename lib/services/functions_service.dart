@@ -11,10 +11,10 @@ class FunctionsService {
   static final FunctionsService _instance = FunctionsService._internal();
   factory FunctionsService() => _instance;
   FunctionsService._internal() {
-    // 개발 환경에서는 에뮬레이터 사용
+    // 개발 환경에서는 에뮬레이터 사용 (모든 플랫폼이 동일한 인스턴스 사용)
     if (kDebugMode) {
-      _functions.useFunctionsEmulator('localhost', 5001);
-      debugPrint('Firebase Functions 에뮬레이터 연결: localhost:5001');
+      _functions.useFunctionsEmulator('192.168.123.66', 5001);
+      debugPrint('Firebase Functions 에뮬레이터 연결: 192.168.123.66:5001');
     }
   }
 
