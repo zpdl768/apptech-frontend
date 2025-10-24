@@ -27,15 +27,15 @@ class _KeyboardScreenState extends State<KeyboardScreen> {
   final FocusNode _focusNode = FocusNode();
   
   // ===== 타이핑 통계 상태 변수 =====
-  
+
   /// 현재 세션에서 입력한 총 글자수
   int _charCount = 0;
-  
-  /// 현재 세션에서 획득한 캐시 수 (UI 표시용)
-  int _sessionCash = 0;
-  
+
+  /// 일일 한도 경고를 이미 표시했는지 추적하는 플래그
+  bool _hasShownDailyLimitWarning = false;
+
   // ===== 성능 최적화 관련 변수 =====
-  
+
   /// 연속된 타이핑 이벤트를 50ms 간격으로 디바운싱하는 타이머
   Timer? _debounceTimer;
 
@@ -103,41 +103,39 @@ class _KeyboardScreenState extends State<KeyboardScreen> {
   // ===== 캐시 적립 로직 처리 메서드 =====
   
   /// 타이핑한 글자수를 바탕으로 캐시를 적립하는 메서드
-  /// 복잡한 로직: 10자당 1캐시 계산, UserProvider 연동, 성공 알림 표시
+  /// 10자당 1캐시 계산, UserProvider 연동
   void _updateTypingCount(int addedChars) {
     // UserProvider를 통해 Firestore에 타이핑 데이터 저장
     final userProvider = Provider.of<UserProvider>(context, listen: false);
-    userProvider.updateTypingCount(addedChars); // 실제 DB 업데이트
-    
-    // 캐시 적립 계산 (10자당 1캐시)
-    final cashEarned = addedChars ~/ 10;        // 정수 나눗셈으로 캐시 계산
-    
-    if (cashEarned > 0) {
-      // 세션별 적립 캐시 누적 (UI 표시용)
-      setState(() {
-        _sessionCash += cashEarned;
-      });
-      
-      // 캐시 획득 성공 알림 (1초간 표시)
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('🎉 $cashEarned 캐시 획득!'),
-          duration: Duration(seconds: 1),         // 짧은 알림으로 타이핑 방해 최소화
-          backgroundColor: Colors.green,          // 성공을 나타내는 녹색 배경
-        ),
-      );
+
+    userProvider.updateTypingCount(addedChars); // 실제 DB 업데이트 (낙관적 업데이트)
+
+    // 1000자 도달 시 일일 한도 경고 (한 번만 표시)
+    if (!_hasShownDailyLimitWarning && userProvider.currentUser != null) {
+      final todayCharCount = userProvider.currentUser!.todayCharCount;
+
+      if (todayCharCount >= 1000) {
+        _hasShownDailyLimitWarning = true; // 플래그 설정하여 중복 표시 방지
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('⚠️ 타이핑 일일 한도(100캐시/1000자)에 도달했습니다!\n광고 시청으로 추가 캐시를 획득하세요.'),
+            duration: Duration(seconds: 4),         // 중요한 정보이므로 4초간 표시
+            backgroundColor: Colors.red,            // 경고를 나타내는 빨간색 배경
+          ),
+        );
+      }
     }
   }
 
   // ===== 텍스트 관리 유틸리티 메서드 =====
   
   /// 입력된 텍스트를 모두 지우는 메서드
-  /// 글자수 카운트는 초기화하지만 적립된 캐시는 유지
+  /// 글자수 카운트 초기화
   void _clearText() {
     setState(() {
       _textController.clear();  // 텍스트 필드 내용 삭제
       _charCount = 0;           // 현재 세션 글자수 초기화
-      // 주의: _sessionCash는 초기화하지 않음 (세션 통계 유지)
     });
   }
 
@@ -182,46 +180,28 @@ class _KeyboardScreenState extends State<KeyboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             
-            // ===== 상단 통계 카드 (오늘 입력/캐시/세션 내역) =====
+            // ===== 상단 통계 카드 (오늘 타이핑 글자수만 표시) =====
             Consumer<UserProvider>(
               builder: (context, userProvider, child) {
                 final user = userProvider.currentUser;
                 final todayCharCount = user?.todayCharCount ?? 0;    // 오늘 총 입력 글자수
-                final todayCash = (todayCharCount ~/ 10).clamp(0, 100); // 오늘 적립된 캐시 (100 제한)
-                final maxCash = 100;                                  // 하루 최대 캐시 한도
-                
-                // 3개 열로 구성된 통계 카드
+
+                // 타이핑 글자수만 표시하는 심플한 카드 (컴팩트)
                 return Card(
                   child: Padding(
-                    padding: const EdgeInsets.all(16.0), // 카드 내부 16px 패딩
+                    padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0), // 패딩 축소
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // 첫 번째 열: 오늘 총 입력 글자수
-                        Expanded(
-                          child: Column(
-                            children: [
-                              Text('오늘 입력', style: TextStyle(fontSize: 12, color: Colors.grey)), // 라벨
-                              Text('$todayCharCount자', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), // 값
-                            ],
-                          ),
-                        ),
-                        // 두 번째 열: 오늘 적립 캐시
-                        Expanded(
-                          child: Column(
-                            children: [
-                              Text('오늘 캐시', style: TextStyle(fontSize: 12, color: Colors.grey)), // 라벨
-                              Text('$todayCash', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), // 현재 캐시만 표시
-                            ],
-                          ),
-                        ),
-                        // 세 번째 열: 현재 세션에서만 획득한 캐시 (녹색 + 표시)
-                        Expanded(
-                          child: Column(
-                            children: [
-                              Text('세션 캐시', style: TextStyle(fontSize: 12, color: Colors.grey)), // 라벨
-                              Text('+$_sessionCash', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green)), // 녹색 + 표시
-                            ],
-                          ),
+                        Text('오늘 타이핑', style: TextStyle(fontSize: 14, color: Colors.grey)),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text('$todayCharCount', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)), // 숫자만 크게
+                            SizedBox(width: 2),
+                            Text('자', style: TextStyle(fontSize: 16, color: Colors.grey)), // 단위
+                          ],
                         ),
                       ],
                     ),

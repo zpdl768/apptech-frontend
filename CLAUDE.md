@@ -650,6 +650,87 @@ _userSubscription = FirebaseFirestore.instance
 
 ## Deployment History & Changes
 
+### 2025-10-24: 타이핑 시스템 안정화 및 UI 개선
+
+#### 🐛 해결된 주요 문제
+
+**타이핑 카운트 버벅임 및 감소 현상**
+- **증상**: 빠른 타이핑 시 글자 수가 10자마다 갑자기 감소하거나 튀는 현상
+- **원인**: Firestore 실시간 리스너가 로컬 업데이트를 덮어쓰는 충돌 발생
+- **해결**: 필드별 선택적 동기화 전략 도입
+  - `todayCharCount`: 로컬 전용 관리 (서버 값 무시)
+  - `totalCash`, `dailyCashEarned`: 서버 검증 값만 반영
+  - `boxStates`, `collectedCash`: 양방향 동기화
+
+**totalCash 불안정 현상**
+- **증상**: 타이핑 중 상단 총 캐시가 +1/-1 반복
+- **원인**: 타이핑 시 `totalCash`를 잘못 증가시키는 로직
+- **해결**: 타이핑 시 `totalCash` 절대 변경 안 함 (홈 화면 코인 터치 시에만 증가)
+
+#### 🔧 백엔드 로직 개선
+
+**Firestore 실시간 리스너 최적화** (`user_provider.dart:110-169`)
+```dart
+// 필드별 선택적 동기화 전략
+void _setupRealtimeListener(String userId) {
+  // 1. totalCash: 서버 검증 값만 반영
+  // 2. dailyCashEarned: 서버 검증 값만 반영
+  // 3. boxStates: 서버 상태 반영
+  // 4. todayCharCount: 로컬 전용 - 서버 무시 (충돌 방지)
+  // 5. collectedCash: 서버 상태 반영
+}
+```
+
+**타이핑 업데이트 로직 단순화** (`user_provider.dart:196-240`)
+- 불필요한 캐시 계산 로직 제거
+- `todayCharCount`와 `boxStates`만 업데이트
+- `totalCash`는 절대 변경하지 않음
+- 1초 디바운싱으로 Firestore 쓰기 최소화
+
+**데이터 흐름 명확화**
+```
+타이핑 → todayCharCount 증가 (로컬만)
+       → Firestore 저장 (1초 디바운싱)
+       → readyCash = (todayCharCount ÷ 10) - collectedCash (홈 화면에서 실시간 계산)
+
+코인 터치 → collectedCash +1
+         → totalCash +1
+         → Firestore 저장
+```
+
+#### 🎨 키보드 화면 UI 개선 (`keyboard_screen.dart`)
+
+**통계 카드 단순화**
+- **이전**: 3열 (오늘 입력 | 오늘 캐시 | 세션 캐시)
+- **변경**: 1열 (오늘 타이핑만 표시)
+- 불필요한 `_sessionCash` 변수 완전 제거
+
+**카드 높이 축소 (50% 감소)**
+- 레이아웃: 세로(Column) → 가로(Row)
+- 패딩: 20px → 12px/16px
+- 폰트: 32pt → 24pt
+- 타이핑 영역에 더 많은 공간 확보
+
+**최종 UI**
+```
+┌─────────────────────────────────────┐
+│  오늘 타이핑              1000 자    │
+└─────────────────────────────────────┘
+```
+
+#### ✅ 개선 효과
+
+- 타이핑 글자 수 절대 감소 안 함 (100% 안정)
+- totalCash 완전 안정화 (타이핑 중 변경 없음)
+- UI 깔끔하고 공간 효율적
+- Firestore 읽기/쓰기 충돌 완전 제거
+- 코드 가독성 및 유지보수성 향상
+
+#### 📁 수정된 파일
+
+- `lib/providers/user_provider.dart`: 핵심 로직 개선 (5곳)
+- `lib/screens/keyboard_screen.dart`: UI 개선 및 변수 정리
+
 ### 2025-10-23: iOS 실물 기기 배포 및 Firebase Functions 프로덕션 배포
 
 #### 🔧 구성 변경

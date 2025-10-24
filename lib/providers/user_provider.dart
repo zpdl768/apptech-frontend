@@ -11,10 +11,14 @@ class UserProvider extends ChangeNotifier {
   UserModel? _currentUser;
   bool _isLoading = false;
   StreamSubscription<DocumentSnapshot>? _userSubscription;
-  
+
   // 에러 상태 관리
   String? _lastError;
   bool _isDailyLimitReached = false;
+
+  // Provider가 dispose 되었는지 추적
+  bool _mounted = true;
+  bool get mounted => _mounted;
   
   /// 가장 최근 에러 메시지
   String? get lastError => _lastError;
@@ -101,7 +105,7 @@ class UserProvider extends ChangeNotifier {
 
   void _setupRealtimeListener(String userId) {
     if (_firestore == null) return;
-    
+
     _userSubscription?.cancel();
     _userSubscription = _firestore
         .collection('users')
@@ -111,10 +115,49 @@ class UserProvider extends ChangeNotifier {
       if (snapshot.exists && _currentUser != null) {
         final updatedUser = UserModel.fromFirestore(snapshot);
         final currentUser = _currentUser!;
-        if (updatedUser.totalCash != currentUser.totalCash ||
-            updatedUser.todayCharCount != currentUser.todayCharCount ||
-            _boxStatesChanged(updatedUser.boxStates, currentUser.boxStates)) {
-          _currentUser = updatedUser;
+
+        // ===== 필드별 선택적 동기화 전략 =====
+        // todayCharCount: 로컬 전용 (타이핑 중 충돌 방지) - 서버 무시
+        // totalCash, dailyCashEarned: 서버 검증 값만 반영
+        // boxStates: 서버 상태 반영
+
+        bool needsUpdate = false;
+        UserModel newUser = currentUser;
+
+        // 1. totalCash: 서버 검증 값만 반영 (Functions에서 업데이트)
+        if (updatedUser.totalCash != currentUser.totalCash) {
+          debugPrint('🔄 서버 totalCash 동기화: ${currentUser.totalCash} → ${updatedUser.totalCash}');
+          newUser = newUser.copyWith(totalCash: updatedUser.totalCash);
+          needsUpdate = true;
+        }
+
+        // 2. dailyCashEarned: 서버 검증 값만 반영 (Functions에서 업데이트)
+        if (updatedUser.dailyCashEarned != currentUser.dailyCashEarned) {
+          debugPrint('🔄 서버 dailyCashEarned 동기화: ${currentUser.dailyCashEarned} → ${updatedUser.dailyCashEarned}');
+          newUser = newUser.copyWith(dailyCashEarned: updatedUser.dailyCashEarned);
+          needsUpdate = true;
+        }
+
+        // 3. boxStates: 서버 상태 반영
+        if (_boxStatesChanged(updatedUser.boxStates, currentUser.boxStates)) {
+          debugPrint('🔄 서버 boxStates 동기화');
+          newUser = newUser.copyWith(boxStates: updatedUser.boxStates);
+          needsUpdate = true;
+        }
+
+        // 4. todayCharCount: 로컬 전용 - 서버 무시 (타이핑 중 충돌 방지)
+        // 서버의 todayCharCount는 절대 반영하지 않음 (로컬에서만 관리)
+
+        // 5. collectedCash: 서버 상태 반영 (캐시 수집용)
+        if (updatedUser.collectedCash != currentUser.collectedCash) {
+          debugPrint('🔄 서버 collectedCash 동기화: ${currentUser.collectedCash} → ${updatedUser.collectedCash}');
+          newUser = newUser.copyWith(collectedCash: updatedUser.collectedCash);
+          needsUpdate = true;
+        }
+
+        if (needsUpdate) {
+          _currentUser = newUser;
+          _updateDailyLimitStatus();
           notifyListeners();
         }
       }
@@ -147,64 +190,47 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
+  // Firestore 쓰기 디바운싱을 위한 타이머
+  Timer? _firestoreDebounceTimer;
+
   Future<void> updateTypingCount(int count) async {
     if (_currentUser == null || count <= 0) return;
 
     try {
-      // Calculate new values
       final currentUser = _currentUser!;
       final newTodayCharCount = currentUser.todayCharCount + count;
-      
-      // Calculate cash earned (10글자당 1캐시)
-      final currentCashFromChars = currentUser.todayCharCount ~/ 10;
-      final newCashFromChars = newTodayCharCount ~/ 10;
-      final cashToAdd = newCashFromChars - currentCashFromChars;
-      
+
       // Update reward box states based on new typing count
       final updatedBoxStates = _updateBoxStates(newTodayCharCount, currentUser.boxStates);
-      
-      UserModel updatedUser;
-      
-      if (cashToAdd > 0) {
-        // Firebase Functions를 통해 캐시 획득 검증 (800캐시 한도 체크)
-        final result = await FunctionsService().earnCashFromTyping(cashToAdd);
-        
-        if (result['success'] && result['allowed']) {
-          // Functions에서 검증된 캐시 값으로 업데이트
-          updatedUser = currentUser.copyWith(
-            todayCharCount: newTodayCharCount,
-            totalCash: result['newTotalCash'],
-            dailyCashEarned: result['newDailyCashEarned'],
-            boxStates: updatedBoxStates,
-          );
-          debugPrint('타이핑 캐시 획득: $cashToAdd 캐시 (남은 일일 한도: ${result['remainingDaily']})');
-        } else {
-          // 한도 도달 시 캐시 없이 타이핑 카운트만 업데이트
-          updatedUser = currentUser.copyWith(
-            todayCharCount: newTodayCharCount,
-            boxStates: updatedBoxStates,
-          );
-          debugPrint('일일 캐시 한도 도달: 타이핑 카운트만 업데이트');
-        }
-      } else {
-        // 캐시가 없는 경우 타이핑 카운트와 상자 상태만 업데이트
-        updatedUser = currentUser.copyWith(
-          todayCharCount: newTodayCharCount,
-          boxStates: updatedBoxStates,
-        );
-      }
 
-      // Update local state first for immediate UI response
-      _currentUser = updatedUser;
+      // ===== 타이핑 카운트와 상자 상태만 업데이트 =====
+      // totalCash는 절대 변경하지 않음 (홈 화면에서 코인 터치 시에만 증가)
+      // readyCash는 홈 화면에서 (todayCharCount ÷ 10 - collectedCash)로 실시간 계산됨
+      final optimisticUser = currentUser.copyWith(
+        todayCharCount: newTodayCharCount,
+        boxStates: updatedBoxStates,
+      );
+
+      _currentUser = optimisticUser;
       notifyListeners();
 
-      // Update Firestore (타이핑 카운트와 상자 상태)
-      if (_firestore != null) {
-        await _firestore.collection('users').doc(updatedUser.id).update({
-          'todayCharCount': updatedUser.todayCharCount,
-          'boxStates': updatedUser.boxStates.map((state) => state.index).toList(),
-        });
-      }
+      // ===== Firestore 쓰기 디바운싱 (1초) =====
+      // 연속 타이핑 시 Firestore 쓰기를 1초마다만 실행하여 부하 감소
+      // todayCharCount는 로컬 전용이므로 리스너와 충돌 없음
+      _firestoreDebounceTimer?.cancel();
+      _firestoreDebounceTimer = Timer(Duration(seconds: 1), () async {
+        if (_firestore != null && _currentUser != null) {
+          try {
+            await _firestore.collection('users').doc(_currentUser!.id).update({
+              'todayCharCount': _currentUser!.todayCharCount,
+              'boxStates': _currentUser!.boxStates.map((state) => state.index).toList(),
+            });
+            debugPrint('✅ Firestore 타이핑 카운트 업데이트 완료');
+          } catch (error) {
+            debugPrint('⚠️ Firestore 업데이트 에러: $error');
+          }
+        }
+      });
     } catch (e) {
       debugPrint('타이핑 카운트 업데이트 에러: $e');
       // Revert local state on error - restore to original state
@@ -216,7 +242,7 @@ class UserProvider extends ChangeNotifier {
   /// 사용자가 동전을 터치하여 캐시를 수집하는 메서드
   Future<void> collectCash() async {
     if (_currentUser == null) return;
-    
+
     final currentUser = _currentUser!;
     final readyCash = (currentUser.todayCharCount ~/ 10) - currentUser.collectedCash;
     if (readyCash <= 0) return; // 수집할 캐시가 없으면 종료
@@ -228,29 +254,31 @@ class UserProvider extends ChangeNotifier {
         totalCash: currentUser.totalCash + 1,
       );
 
-      // UI 즉시 업데이트
+      // UI 즉시 업데이트 (낙관적 업데이트)
       _currentUser = updatedUser;
       _updateDailyLimitStatus();
       notifyListeners();
 
       // Firestore 동기화
+      // 리스너가 collectedCash, totalCash를 동기화하므로 플래그 불필요
       if (_firestore != null) {
         try {
           await _firestore.collection('users').doc(currentUser.id).update({
             'collectedCash': updatedUser.collectedCash,
             'totalCash': updatedUser.totalCash,
           });
+          debugPrint('✅ Firestore 캐시 수집 업데이트 완료');
         } catch (firestoreError) {
-          debugPrint('Firestore 업데이트 에러: $firestoreError');
+          debugPrint('⚠️ Firestore 업데이트 에러: $firestoreError');
+          // 에러 시 상태 롤백
+          _currentUser = currentUser;
+          notifyListeners();
         }
       }
     } catch (e) {
-      debugPrint('캐시 수집 에러: $e');
+      debugPrint('⚠️ 캐시 수집 에러: $e');
       // 에러 시 상태 롤백
-      _currentUser = currentUser.copyWith(
-        collectedCash: currentUser.collectedCash - 1,
-        totalCash: currentUser.totalCash - 1,
-      );
+      _currentUser = currentUser;
       notifyListeners();
     }
   }
@@ -325,28 +353,34 @@ class UserProvider extends ChangeNotifier {
       // 상자 상태를 완료로 변경
       final updatedBoxStates = List<BoxState>.from(currentUser.boxStates);
       updatedBoxStates[boxIndex] = BoxState.completed;
-      
+
       // Functions에서 검증된 캐시 값으로 UI 업데이트
       final updatedUser = currentUser.copyWith(
         totalCash: result['newTotalCash'],
         dailyCashEarned: result['newDailyCashEarned'],
         boxStates: updatedBoxStates,
       );
-      
-      // UI 즉시 업데이트
+
+      // UI 즉시 업데이트 (낙관적 업데이트)
       _currentUser = updatedUser;
       _updateDailyLimitStatus();
       notifyListeners();
-      
+
       // Firestore는 Functions에서 이미 업데이트됨
       // 상자 상태만 추가로 업데이트
+      // 리스너가 boxStates를 동기화하므로 플래그 불필요
       if (_firestore != null) {
-        await _firestore.collection('users').doc(currentUser.id).update({
-          'boxStates': updatedUser.boxStates.map((state) => state.index).toList(),
-        });
+        try {
+          await _firestore.collection('users').doc(currentUser.id).update({
+            'boxStates': updatedUser.boxStates.map((state) => state.index).toList(),
+          });
+          debugPrint('✅ Firestore 상자 상태 업데이트 완료');
+        } catch (error) {
+          debugPrint('⚠️ Firestore 상자 상태 업데이트 에러: $error');
+        }
       }
-      
-      debugPrint('리워드 광고 완료: 상자 $boxIndex에서 $rewardCash 캐시 획득 (남은 일일 한도: ${result['remainingDaily']})');
+
+      debugPrint('✅ 리워드 광고 완료: 상자 $boxIndex에서 $rewardCash 캐시 획득 (남은 일일 한도: ${result['remainingDaily']})');
       return rewardCash;
     } catch (e) {
       debugPrint('리워드 광고 완료 처리 에러: $e');
@@ -386,7 +420,9 @@ class UserProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _mounted = false;
     _userSubscription?.cancel();
+    _firestoreDebounceTimer?.cancel();
     super.dispose();
   }
 }
