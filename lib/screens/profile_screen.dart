@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/auth_provider.dart';
 import '../providers/user_provider.dart';
 
@@ -114,12 +115,12 @@ class ProfileScreen extends StatelessWidget {
                   () {},                     // 빈 콜백 (향후 구현 예정)
                 ),
                 
-                // 개인정보 처리방침 메뉴 (현재 기능 없음)
+                // 이용 약관 및 개인정보 처리방침 메뉴 (웹페이지 연결)
                 _buildSettingItem(
-                  Icons.privacy_tip_outlined, // 개인정보 아이콘
-                  '개인정보 처리방침',        // 메뉴 제목
-                  '개인정보 보호 정책',       // 부제목
-                  () {},                      // 빈 콜백 (향후 구현 예정)
+                  Icons.privacy_tip_outlined,           // 개인정보 아이콘
+                  '이용 약관 및 개인정보 처리방침',      // 메뉴 제목
+                  '서비스 이용 약관 및 개인정보 보호', // 부제목
+                  () => _openTermsAndPrivacy(),         // 웹페이지 열기
                 ),
                 
                 SizedBox(height: 20),
@@ -282,6 +283,27 @@ class ProfileScreen extends StatelessWidget {
         },
       ),
     );
+  }
+
+  // ===== 이용 약관 및 개인정보 처리방침 관련 메서드 =====
+
+  /// 이용 약관 및 개인정보 처리방침 웹페이지를 여는 메서드
+  /// Firebase Hosting에 배포된 웹페이지를 브라우저로 엽니다
+  Future<void> _openTermsAndPrivacy() async {
+    final Uri url = Uri.parse('https://apptech-9928c.web.app/terms_and_privacy.html');
+
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(
+          url,
+          mode: LaunchMode.externalApplication, // 외부 브라우저에서 열기
+        );
+      } else {
+        debugPrint('약관 페이지를 열 수 없습니다: $url');
+      }
+    } catch (e) {
+      debugPrint('약관 페이지 열기 오류: $e');
+    }
   }
 
   // ===== 통계 카드 생성 유틸리티 메서드 =====
