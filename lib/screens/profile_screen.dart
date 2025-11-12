@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../providers/auth_provider.dart';
 import '../providers/user_provider.dart';
 
@@ -84,72 +86,9 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                
+
                 SizedBox(height: 20),
-                
-                // ===== 통계 섹션 제목 =====
-                Text(
-                  '📊 통계',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 12),
-                
-                // ===== 첫 번째 통계 행 (총 캐시 + 오늘 입력 글자수) =====
-                Row(
-                  children: [
-                    // 총 보유 캐시 카드 (황금색 테마)
-                    Expanded(
-                      child: _buildStatCard(
-                        '총 캐시',                      // 카드 제목
-                        '${user.totalCash}',           // 실제 보유 캐시 수
-                        Colors.amber,                   // 황금색 테마
-                        Icons.monetization_on,         // 코인 아이콘
-                      ),
-                    ),
-                    SizedBox(width: 12), // 카드 간 12px 간격
-                    
-                    // 오늘 타이핑 글자수 카드 (파란색 테마)
-                    Expanded(
-                      child: _buildStatCard(
-                        '오늘 입력',                    // 카드 제목
-                        '${user.todayCharCount}자',    // 오늘 입력한 글자수
-                        Colors.blue,                    // 파란색 테마
-                        Icons.keyboard,                 // 키보드 아이콘
-                      ),
-                    ),
-                  ],
-                ),
-                
-                SizedBox(height: 12),
-                
-                // ===== 두 번째 통계 행 (오늘 캐시 + 일일 진행률) =====
-                Row(
-                  children: [
-                    // 오늘 적립 캐시 카드 (녹색 테마)
-                    Expanded(
-                      child: _buildStatCard(
-                        '오늘 캐시',                                          // 카드 제목
-                        '${(user.todayCharCount ~/ 10).clamp(0, 100)}',      // 오늘 적립 캐시 (10자당 1캐시, 최대 100)
-                        Colors.green,                                         // 녹색 테마
-                        Icons.today,                                          // 오늘 아이콘
-                      ),
-                    ),
-                    SizedBox(width: 12), // 카드 간 12px 간격
-                    
-                    // 일일 진행률 카드 (보라색 테마)
-                    Expanded(
-                      child: _buildStatCard(
-                        '진행률',                                                                      // 카드 제목
-                        '${(((user.todayCharCount ~/ 10).clamp(0, 100) / 100) * 100).toInt()}%',    // 백분율 계산 (오늘캐시/100*100)
-                        Colors.purple,                                                                 // 보라색 테마
-                        Icons.trending_up,                                                             // 상승 트렌드 아이콘
-                      ),
-                    ),
-                  ],
-                ),
-                
-                SizedBox(height: 30),
-                
+
                 // ===== 설정 섹션 제목 =====
                 Text(
                   '⚙️ 설정',
@@ -158,13 +97,13 @@ class ProfileScreen extends StatelessWidget {
                 SizedBox(height: 12),
                 
                 // ===== 일반 설정 메뉴 항목들 =====
-                
-                // 앱 정보 메뉴 (현재 기능 없음)
+
+                // 앱 버전 메뉴 (터치해도 아무 동작 없음)
                 _buildSettingItem(
                   Icons.info_outline,        // 정보 아이콘
-                  '앱 정보',                 // 메뉴 제목
+                  '앱 버전',                 // 메뉴 제목
                   '버전 1.0.0',              // 부제목 (현재 앱 버전)
-                  () {},                     // 빈 콜백 (향후 구현 예정)
+                  () {},                     // 빈 콜백 (터치해도 아무 일 없음)
                 ),
                 
                 // 도움말 메뉴 (현재 기능 없음)
@@ -184,7 +123,7 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 
                 SizedBox(height: 20),
-                
+
                 // ===== 로그아웃 메뉴 (위험한 작업이므로 빨간색 + 확인 다이얼로그) =====
                 _buildSettingItem(
                   Icons.logout,              // 로그아웃 아이콘
@@ -211,7 +150,7 @@ class ProfileScreen extends StatelessWidget {
                         ],
                       ),
                     );
-                    
+
                     // ===== 사용자가 로그아웃을 확인했을 경우 실제 로그아웃 실행 =====
                     if (result == true) {
                       await authProvider.signOut();                                // Firebase 로그아웃
@@ -221,6 +160,119 @@ class ProfileScreen extends StatelessWidget {
                     }
                   },
                   color: Colors.red, // 위험한 작업임을 나타내는 빨간색
+                ),
+
+                SizedBox(height: 12),
+
+                // ===== 회원 탈퇴 메뉴 (위험한 작업이므로 회색 + 경고 다이얼로그) =====
+                _buildSettingItem(
+                  Icons.person_remove_outlined,  // 회원 탈퇴 아이콘
+                  '회원 탈퇴',                    // 메뉴 제목
+                  '계정 및 모든 데이터 삭제',     // 부제목
+                  () async {                      // 복잡한 탈퇴 로직
+                    // ===== 탈퇴 경고 다이얼로그 표시 =====
+                    final result = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: Text('회원 탈퇴'),
+                        content: Text(
+                          '정말 탈퇴하시겠습니까?\n\n'
+                          '탈퇴 시 모든 데이터가 삭제되며\n'
+                          '복구할 수 없습니다.',
+                        ),
+                        actions: [
+                          // 취소 버튼
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: Text('취소'),
+                          ),
+                          // 탈퇴 확인 버튼 (빨간색)
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.red,
+                            ),
+                            child: Text('탈퇴'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    // ===== 사용자가 탈퇴를 확인했을 경우 실제 탈퇴 실행 =====
+                    if (result == true && context.mounted) {
+                      // 로딩 다이얼로그 표시
+                      showDialog(
+                        context: context,
+                        barrierDismissible: false,
+                        builder: (context) => Center(
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+
+                      try {
+                        final currentUser = firebase_auth.FirebaseAuth.instance.currentUser;
+                        if (currentUser == null) {
+                          throw Exception('로그인 정보를 찾을 수 없습니다.');
+                        }
+
+                        final uid = currentUser.uid;
+
+                        // 1. Firestore 사용자 문서 삭제
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(uid)
+                            .delete();
+
+                        // 2. Firebase Authentication 계정 삭제
+                        await currentUser.delete();
+
+                        // 로딩 다이얼로그 닫기
+                        if (context.mounted) {
+                          Navigator.pop(context);
+
+                          // 성공 메시지 표시
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('회원 탈퇴가 완료되었습니다.'),
+                              backgroundColor: Colors.green,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+
+                          // 로그인 화면으로 이동
+                          await Future.delayed(Duration(milliseconds: 500));
+                          if (context.mounted) {
+                            Navigator.popUntil(context, (route) => route.isFirst);
+                          }
+                        }
+                      } catch (e) {
+                        // 로딩 다이얼로그 닫기
+                        if (context.mounted) {
+                          Navigator.pop(context);
+
+                          // 에러 메시지 표시
+                          String errorMessage = '회원 탈퇴 중 오류가 발생했습니다.';
+
+                          // Firebase 에러 타입별 메시지
+                          if (e is firebase_auth.FirebaseAuthException) {
+                            if (e.code == 'requires-recent-login') {
+                              errorMessage = '보안을 위해 다시 로그인 후 탈퇴해주세요.';
+                            }
+                          }
+
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(errorMessage),
+                              backgroundColor: Colors.red,
+                              duration: Duration(seconds: 3),
+                            ),
+                          );
+                        }
+                        debugPrint('회원 탈퇴 오류: $e');
+                      }
+                    }
+                  },
+                  color: Colors.grey[600], // 회색 (로그아웃과 구분)
                 ),
                 
                 SizedBox(height: 40),

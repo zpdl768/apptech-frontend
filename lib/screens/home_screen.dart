@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:ui';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/auth_provider.dart';
 import '../providers/user_provider.dart';
 import '../models/user_model.dart';
 import '../services/reward_ad_service.dart';
+import '../services/interstitial_ad_service.dart';
 import 'keyboard_screen.dart';
 import 'store_screen.dart';
 import 'profile_screen.dart';
@@ -41,7 +43,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   
   /// 리워드 광고 서비스 인스턴스
   final RewardAdService _rewardAdService = RewardAdService();
-  
+
+  /// 전면 광고 서비스 인스턴스 (코인 10개마다 표시)
+  final InterstitialAdService _interstitialAdService = InterstitialAdService();
+
   // ===== 코인 터치 애니메이션 관련 변수 =====
   
   /// 코인 애니메이션 컨트롤러 (200ms 지속시간)
@@ -111,22 +116,66 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   // ===== 캐시 수집 및 애니메이션 관련 메서드 =====
   
   /// 코인을 터치했을 때 캐시 수집과 애니메이션을 동시에 실행하는 메서드
-  /// 복잡한 로직: readyCash 계산, UserProvider 호출, 애니메이션 실행
+  /// 복잡한 로직: readyCash 계산, 10의 배수 체크, 광고 표시, UserProvider 호출, 애니메이션 실행
   void _animateAndCollectCash() {
     // UserProvider에서 현재 사용자 정보 가져오기
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     final user = userProvider.currentUser;
     if (user == null) return; // 사용자 정보가 없으면 종료
-    
+
     // 복잡한 캐시 계산 로직
     // readyCash = (오늘 타이핑한 글자수 ÷ 10) - 이미 수집한 캐시
     // 최소 0, 최대 하루 한도(100)로 제한
     final readyCash = ((user.todayCharCount ~/ 10) - user.collectedCash).clamp(0, maxCashPerDay);
     if (readyCash <= 0) return; // 수집할 캐시가 없으면 종료
-    
+
+    // ===== 10의 배수 체크: 10, 20, 30, ..., 100번째 터치에 광고 표시 =====
+    final nextTapCount = user.todayCoinTapCount + 1;
+    final needsAd = nextTapCount % 10 == 0;
+
+    if (needsAd) {
+      // 광고가 필요한 경우 (10, 20, 30, ..., 100번째)
+      if (!_interstitialAdService.isReady) {
+        // 광고가 로드되지 않은 경우 → 코인 수집 차단
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('광고를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+
+      // 광고 표시
+      _interstitialAdService.showInterstitialAd(
+        onAdClosed: () {
+          // 광고 시청 완료 → 코인 수집 진행
+          debugPrint('전면 광고: 시청 완료, 코인 수집 진행');
+          _performCashCollection(userProvider);
+        },
+        onAdFailedToShow: (error) {
+          // 광고 표시 실패 → 코인 수집 차단
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('광고를 끝까지 시청해야 코인을 수집할 수 있습니다.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        },
+      );
+    } else {
+      // 광고가 불필요한 경우 바로 코인 수집
+      _performCashCollection(userProvider);
+    }
+  }
+
+  /// 실제 캐시 수집 및 애니메이션을 실행하는 헬퍼 메서드
+  void _performCashCollection(UserProvider userProvider) {
     // 캐시 수집 실행 (UserProvider를 통해 Firestore에 저장)
     userProvider.collectCash();
-    
+
     // 코인 터치 애니메이션 실행
     // 200ms 동안 -15px 위로 올라간 후 다시 원래 위치로 돌아오기
     _coinAnimationController.forward().then((_) {
@@ -143,6 +192,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _coinAnimationController.dispose(); // 애니메이션 컨트롤러 해제
     _bannerAd?.dispose();               // 배너 광고 인스턴스 해제
     _rewardAdService.dispose();         // 리워드 광고 서비스 해제
+    _interstitialAdService.dispose();   // 전면 광고 서비스 해제
     super.dispose();
   }
 
@@ -416,51 +466,57 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   splashColor: readyCash > 0 ? Colors.deepPurple.withValues(alpha: 0.1) : Colors.transparent,
                   highlightColor: readyCash > 0 ? Colors.deepPurple.withValues(alpha: 0.05) : Colors.transparent,
                   child: Container(
-                    width: 220,  // 전체 컨테이너 크기
-                    height: 220,
+                    width: 260,  // 전체 컨테이너 크기
+                    height: 260,
                     padding: EdgeInsets.all(10),
                     child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      // 원형 진행률 표시기 (200x200 크기)
+                      // 원형 진행률 표시기 (240x240 크기)
                       SizedBox(
-                        width: 200,
-                        height: 200,
+                        width: 240,
+                        height: 240,
                         child: CircularProgressIndicator(
                           value: progress,                               // 진행률 (0.0 ~ 1.0)
-                          strokeWidth: 16,                               // 선 두께
+                          strokeWidth: 20,                               // 선 두께
                           backgroundColor: Colors.grey.shade300,         // 배경 색상 (회색)
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.black), // 진행 색상 (검은색)
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.deepPurple), // 진행 색상 (검은색)
                         ),
                       ),
                       
                       // 중앙 텍스트 정보 (글자수, 설명, 안내 메시지)
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text('${user.todayCharCount}자', 
-                              style: TextStyle(
-                                fontSize: 28, 
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black
-                              )),
-                          Text('10자당 1캐시 저장', 
-                              style: TextStyle(
-                                fontSize: 14, 
-                                color: Colors.grey[600]
-                              )),
-                          if (readyCash > 0)
+                      Transform.translate(
+                        offset: Offset(0, -15), // 15px 위로 이동
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text('${user.todayCharCount}자',
+                                style: TextStyle(
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black
+                                )),
+                            Text('10자당 1캐시 저장',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: Colors.grey[600]
+                                )),
+                            // 항상 공간 차지, readyCash > 0일 때만 표시
                             Padding(
                               padding: const EdgeInsets.only(top: 8),
-                              child: Text('터치하여 캐시 수집!', 
-                                  style: TextStyle(
-                                    fontSize: 12, 
-                                    color: Colors.deepPurple,
-                                    fontWeight: FontWeight.w600
-                                  )),
+                              child: Opacity(
+                                opacity: readyCash > 0 ? 1.0 : 0.0, // 투명도 조절
+                                child: Text('코인을 터치하여 캐시 적립!',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.deepPurple,
+                                      fontWeight: FontWeight.w600
+                                    )),
+                              ),
                             ),
-                        ],
+                          ],
+                        ),
                       ),
                       // ===== 코인 터치 애니메이션 섹션 =====
                       // 하단에 위치한 코인 아이콘, 터치 시 -15px 위로 올라가는 애니메이션 실행
@@ -478,20 +534,17 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 child: Stack(
                                   alignment: Alignment.topRight, // 알림 배지가 코인 우상단에 위치
                                   children: [
-                                    // 메인 코인 아이콘 (40px 크기)
-                                    Icon(Icons.monetization_on, 
-                                        size: 40,
-                                        color: readyCash > 0 
-                                            ? Colors.amber.shade600  // 수집 가능: 황금색
-                                            : Colors.grey.shade400), // 수집 불가: 회색
-                                    // 수집 가능한 캐시 수량 알림 배지 (빨간 원)
-                                    if (readyCash > 0)
-                                      CircleAvatar(
-                                        radius: 8,               // 16px 지름의 작은 원
-                                        backgroundColor: Colors.red,
-                                        child: Text('$readyCash', // 수집 가능한 캐시 숫자 표시
-                                            style: TextStyle(fontSize: 10, color: Colors.white)),
-                                      )
+                                    // 메인 코인 아이콘 (65px 크기) - 항상 황금색 유지
+                                    Icon(Icons.monetization_on,
+                                        size: 65,
+                                        color: Colors.amber.shade600), // 항상 황금색
+                                    // 수집 가능한 캐시 수량 알림 배지 (빨간 원) - 항상 표시
+                                    CircleAvatar(
+                                      radius: 9,               // 18px 지름의 작은 원
+                                      backgroundColor: Colors.red,
+                                      child: Text('$readyCash', // 수집 가능한 캐시 숫자 표시 (0 포함)
+                                          style: TextStyle(fontSize: 10, color: Colors.white)),
+                                    )
                                   ],
                                 ),
                               );
@@ -650,7 +703,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       onAdLoaded: () => debugPrint('리워드 광고: 초기 로딩 완료'),
       onAdFailedToLoad: (error) => debugPrint('리워드 광고: 초기 로딩 실패 - $error'),
     );
-    
+
+    // ===== 전면 광고 미리 로딩 (코인 10개마다 표시용) =====
+    _interstitialAdService.loadInterstitialAd(
+      onAdLoaded: () => debugPrint('전면 광고: 초기 로딩 완료'),
+      onAdFailedToLoad: (error) => debugPrint('전면 광고: 초기 로딩 실패 - $error'),
+    );
+
     // ===== 위젯 빌드 완료 후 사용자 데이터 로드 =====
     // 화면 렌더링이 완료된 후 비동기적으로 실행
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -692,58 +751,60 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             surfaceTintColor: Colors.transparent,   // 머티리얼 틴트 제거
             scrolledUnderElevation: 0,              // 스크롤 시 그림자 제거
             elevation: 0,                           // 기본 그림자 제거
-            toolbarHeight: 32,                      // 앱바 높이: 32px
+            toolbarHeight: 48,                      // 앱바 높이: 48px
             leadingWidth: 120,                      // leading 영역 너비
-            leading: Padding(
-              padding: EdgeInsets.only(left: 16),
-              child: ElevatedButton(
-                onPressed: () => _showAppGuideDialog(context), // 앱 사용법 다이얼로그 표시
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,         // 보라색 배경
-                  foregroundColor: Colors.white,              // 흰색 텍스트
-                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                  fixedSize: Size(60, 20),                   // 60x20 고정 크기
-                ),
-                child: Text(
-                  "앱 사용법", 
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
+            leading: Center(
+              child: Padding(
+                padding: EdgeInsets.only(left: 16),
+                child: GestureDetector(
+                  onTap: () => _showAppGuideDialog(context), // 앱 사용법 다이얼로그 표시
+                  child: SizedBox(
+                    width: 300,                                                         // 가로 길이 300px로 증가
+                    height: 50,                                                         // 세로 길이 50px
+                    child: Chip(
+                      avatar: Icon(Icons.help_outline, color: Colors.grey.shade700, size: 22),
+                      label: SizedBox(
+                        width: 200,                                                     // 텍스트 영역 너비
+                        child: Text('앱 사용법',
+                          style: TextStyle(color: Colors.black, fontSize: 14),
+                          textAlign: TextAlign.center,                                  // 중앙 정렬
+                        ),
+                      ),
+                      backgroundColor: Colors.grey.shade200,
+                      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
                   ),
                 ),
               ),
             ),
             actions: [
-              // 채팅 아이콘 (현재 기능 없음)
+              // 고객센터 아이콘 (카카오톡 채널 연결)
               IconButton(
-                icon: Icon(Icons.chat_bubble_outline, color: Colors.black),
-                onPressed: () {}, // 향후 채팅 기능 구현 예정
+                icon: Icon(Icons.help_center_outlined, color: Colors.black),
+                onPressed: () => _openKakaoSupport(),
+                tooltip: '고객센터',
               ),
-              // 총 보유 캐시 표시 컨테이너
-              Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: Container(
-                  width: 116,  // 고정 너비
-                  height: 32,  // 고정 높이
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,           // 연한 회색 배경
-                    borderRadius: BorderRadius.circular(16), // 둥근 모서리
-                  ),
-                  child: Row(
-                    children: [
-                      SizedBox(width: 8),
-                      Icon(Icons.monetization_on, color: Colors.amber, size: 18), // 코인 아이콘
-                      SizedBox(width: 24),
-                      Expanded(
-                        child: Text(
-                          '${user.totalCash} 캐시', // 사용자의 총 보유 캐시
-                          style: TextStyle(color: Colors.black, fontSize: 14),
-                          textAlign: TextAlign.left,
-                          overflow: TextOverflow.ellipsis, // 긴 숫자 시 말줄임 처리
+              // 총 보유 캐시 표시 Chip
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Chip(
+                    avatar: Icon(Icons.monetization_on, color: Colors.amber, size: 18), // 황금색 코인 아이콘
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 60, // 6자리 숫자를 위한 고정 너비
+                          child: Text(
+                            '${user.totalCash}',
+                            textAlign: TextAlign.right, // 오른쪽 정렬
+                            style: TextStyle(color: Colors.black),
+                          ),
                         ),
-                      ),
-                      SizedBox(width: 4),
-                    ],
+                        Text(' 캐시', style: TextStyle(color: Colors.black)),
+                      ],
+                    ),
+                    backgroundColor: Colors.grey.shade200,                              // 연한 회색 배경
                   ),
                 ),
               )
@@ -773,8 +834,48 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     );
   }
 
+  // ===== 고객센터 관련 메서드 =====
+
+  /// 카카오톡 채널 연결 웹페이지를 여는 메서드
+  /// Firebase Hosting에 배포된 웹페이지를 브라우저로 엽니다
+  Future<void> _openKakaoSupport() async {
+    // TODO: Firebase Hosting 배포 후 실제 URL로 변경
+    // 예시: https://apptech-9928c.web.app/kakao_support.html
+    final Uri url = Uri.parse('https://apptech-9928c.web.app/kakao_support.html');
+
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(
+          url,
+          mode: LaunchMode.externalApplication, // 외부 브라우저에서 열기
+        );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('고객센터 페이지를 열 수 없습니다.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('고객센터 페이지 열기 오류: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('오류가 발생했습니다. 잠시 후 다시 시도해주세요.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   // ===== 앱 사용법 다이얼로그 관련 메서드 =====
-  
+
   /// 앱 사용법 다이얼로그를 표시하는 메서드
   /// 블러 배경 효과와 페이드 애니메이션을 적용한 모달 다이얼로그
   void _showAppGuideDialog(BuildContext context) {

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AppTech 고객센터</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 24px;
+            padding: 40px 32px;
+            max-width: 480px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+
+        .logo {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+
+        .kakao-button {
+            display: inline-block;
+            background: #FEE500;
+            color: #000000;
+            text-decoration: none;
+            padding: 18px 48px;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(254, 229, 0, 0.4);
+            border: none;
+            cursor: pointer;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .kakao-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(254, 229, 0, 0.6);
+        }
+
+        .kakao-button:active {
+            transform: translateY(0);
+        }
+
+        .kakao-icon {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        .info {
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid #eee;
+        }
+
+        .info-text {
+            font-size: 14px;
+            color: #999;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 32px 24px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .subtitle {
+                font-size: 14px;
+            }
+
+            .kakao-button {
+                font-size: 16px;
+                padding: 16px 32px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">💬</div>
+        <h1>AppTech 고객센터</h1>
+        <p class="subtitle">
+            문의사항이나 도움이 필요하신가요?<br>
+            카카오톡 채널을 통해 빠르게 도와드리겠습니다!
+        </p>
+
+        <!-- TODO: 카카오톡 채널 생성 후 아래 URL을 실제 채널 URL로 변경하세요 -->
+        <!-- 예시: href="http://pf.kakao.com/_xxxxxG" -->
+        <a href="#" class="kakao-button" id="kakaoButton">
+            <svg class="kakao-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 3C6.486 3 2 6.582 2 11c0 2.953 2.025 5.516 5 6.816V22l4.197-2.518C11.457 19.494 11.726 19.5 12 19.5c5.514 0 10-3.582 10-8s-4.486-8-10-8z" fill="currentColor"/>
+            </svg>
+            카카오톡 채널 추가하기
+        </a>
+
+        <div class="info">
+            <p class="info-text">
+                📱 카카오톡 채널에서 언제든지 문의하세요<br>
+                ⏰ 평일 10:00 - 18:00 답변<br>
+                💡 자주 묻는 질문은 앱 내 '앱 사용법'을 참고하세요
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // 카카오톡 채널 URL이 설정되지 않은 경우 안내
+        document.getElementById('kakaoButton').addEventListener('click', function(e) {
+            if (this.href === '#' || this.href.endsWith('#')) {
+                e.preventDefault();
+                alert('카카오톡 채널이 아직 준비 중입니다.\n조금만 기다려주세요! 🙏');
+            }
+        });
+    </script>
+</body>
+</html>

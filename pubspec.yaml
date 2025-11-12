@@ -53,6 +53,12 @@ dependencies:
   # Google AdMob
   google_mobile_ads: ^5.2.0
 
+  # SVG support
+  flutter_svg: ^2.0.10
+
+  # URL launcher for opening web pages
+  url_launcher: ^6.3.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -80,9 +86,8 @@ flutter:
   uses-material-design: true
 
   # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  assets:
+    - assets/icons/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
